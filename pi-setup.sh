@@ -1,8 +1,7 @@
 #!/bin/bash
 #
 # pi-setup: Configure a Raspbian SD card for headless use with Particle
-# This script will need to be run with sudo
-# Depends: sshpass
+# User running script will need sudo privileges
 
 function pause()
 {
@@ -24,7 +23,6 @@ red_echo()
   echo "$(tput setaf 1)$(tput bold)$1$(tput sgr0)"
 }
 
-
 HEIGHT=15
 WIDTH=40
 CHOICE_HEIGHT=4
@@ -34,24 +32,24 @@ MENU="Make sure to choose the correct option."
 
 ls -1 "/media/$USER" | grep -vi "boot" > ls.txt
 
+if [ "$(cat ls.txt)" == "" ];
+then
+red_echo "Could not find any partitions. Aborting..."
+fi
+
 i=-1 # To make i iterate from 0
 
 while ((i++)); read partition # Generate OPTIONS
 do
-ipos="$((2 * $i))"
-ppos="$(($ipos + 1))"
+ipos="$((2 * i))"
+ppos="$((ipos + 1))"
 
-OPTIONS[$ipos]="$(($i + 1))"
+OPTIONS[$ipos]="$((i + 1))"
 OPTIONS[$ppos]="$partition"
 
 done < ls.txt
 
 rm ls.txt
-
-
-echo ${OPTIONS[@]}
-echo
-echo ${OPTIONS[1]}
 
 CHOICE=$(dialog --clear \
                 --backtitle "$BACKTITLE" \
@@ -60,6 +58,7 @@ CHOICE=$(dialog --clear \
                 $HEIGHT $WIDTH $CHOICE_HEIGHT \
                 "${OPTIONS[@]}" \
                 2>&1 >/dev/tty)
+                # )
 
 clear
 
@@ -80,8 +79,15 @@ case $CHOICE in
               echo
               exit
             fi
-            echo
-            ls "/media/$USER/$PARTITION"
+            # echo
+            # ls "/media/$USER/$PARTITION"
+            PARTITION="/media/$USER/$PARTITION"
+            if [ -d "$PARTITION" ];
+            then
+              echo "Safety pass. Partition exists." > /dev/null
+            else
+                red_echo "Could not find Partition. Aborting..."
+            fi
             echo
             ;;
 esac
@@ -94,11 +100,12 @@ read -rp "SSID: " WIFI_SSID
 read -rp "PASSWORD: " WIFI_PASS
 echo
 
-echo "network={
+echo "
+network={
     ssid=\"$WIFI_SSID\"
     psk=\"$WIFI_PASS\"
     key_mgmt=WPA-PSK
-}" > "wpa_supplicant.conf" #TODO
+}" | sudo tee -a "$PARTITION/etc/wpa_supplicant/wpa_supplicant.conf"  > /dev/null  #TODO
 
 # Set up hostname
 
@@ -107,16 +114,16 @@ This will determine its .local mDNS IP."
 read -rp "Hostname: " HOSTNAME
 echo
 
-echo "$HOSTNAME" > "hostname" #TODO
+echo "$HOSTNAME" | sudo tee "$PARTITION/etc/hostname" > /dev/null  #TODO
 
-grep -vi "127.0.1.1" "hosts" > "hosts.new" #TODO
-echo "127.0.1.1 $HOSTNAME" >> "hosts.new" #TODO
-rm "hosts" #TODO
-mv "hosts.new" "hosts" #TODO
+grep -vi "127.0.1.1" "$PARTITION/etc/hosts"  | sudo tee "hosts.new" > /dev/null #TODO
+echo "127.0.1.1 $HOSTNAME" | sudo tee -a "hosts.new" > /dev/null #TODO
+sudo rm "$PARTITION/etc/hosts" #TODO
+sudo mv "hosts.new" "$PARTITION/etc/hosts" #TODO
 
 # Enable SSH: just create `ssh` in boot parttion
 
-echo "This file enables SSH.  The contents do not matter." > "ssh" #TODO
+echo "This file enables SSH.  The contents don't matter." | sudo tee "/media/$USER/boot/ssh" > /dev/null #TODO
 
 # Boot the Raspberry Pi and continue via SSH
 
@@ -167,12 +174,4 @@ The GitHub repo can be found here: https://github.com/nrobinson2000/pi-setup
 Your Pi should be connected to the Particle Cloud and running Tinker.
 
 Good luck with your projects!
-
 "
-
-
-
-
-
-
-#
